@@ -13,6 +13,7 @@
 #include "csapp.h"
 #include <sys/socket.h>
 #include <netdb.h>
+#include <unistd.h>
 
 typedef struct{
     char *hostname;
@@ -21,6 +22,7 @@ typedef struct{
 } DNScache;
 
 DNScache *DNSListStart;
+
 /*
  * Function prototypes
  */
@@ -32,6 +34,7 @@ void create_error_response(char* response_buff, int status, char* status_message
 DNScache* find_cache_in_list(char* host_name);
 DNScache* add_cache_to_list(char* host_name);
 int my_open_clientfd(struct hostent *cached_host_entry, int port);
+/*void read_request_line(char* request_buff, int client_sock);*/
 /* 
  * main - Main routine for the proxy program 
  */
@@ -57,7 +60,12 @@ int main(int argc, char **argv)
     struct sockaddr addr;
     socklen_t socklen = sizeof(addr); 
 
-    /* Loop infinitely waiting on client */
+    
+    int status;
+    time_t start;
+    time_t stop;
+    start = time(NULL);
+    /*loop infinitely waiting on client*/
     while(1)
     {
        /* Wait for a connection. */
@@ -65,8 +73,13 @@ int main(int argc, char **argv)
 
        /*handle request from the client*/
        handle_request(client_sock, &addr);
-       waitpid(-1, NULL, WNOHANG);
-       /* wait for any child process to exit and reap it*/
+       
+
+       stop = time(NULL);
+       if(difftime(stop, start) >= 30.0){
+            wait(&status);
+            start = time(NULL);
+       }
     }
 
     exit(0);
@@ -78,11 +91,17 @@ void handle_request(int client_sock, struct sockaddr *address){
     int server_sock;
     
     char request_buff[MAXLINE];
+    bzero(request_buff, MAXLINE);
     char uri_buff[MAXLINE];
+    bzero(uri_buff, MAXLINE);
     char version_buff[MAXLINE];
+    bzero(version_buff, MAXLINE);
     char host_buff[MAXLINE];
+    bzero(host_buff, MAXLINE);
     char path_buff[MAXLINE];
+    bzero(path_buff, MAXLINE);
     char response_buff[MAXLINE];
+    bzero(response_buff, MAXLINE);
 
     /* initialize rio for client*/
     rio_t rio_client;
@@ -90,6 +109,8 @@ void handle_request(int client_sock, struct sockaddr *address){
 
     /*read the first line of the request*/
     Rio_readlineb(&rio_client,request_buff,MAXLINE);
+    /*read_request_line(request_buff, client_sock);*/
+
     /*get the uri from request*/
     if(get_uri(request_buff, uri_buff, version_buff) == -1){
         /* Bad request, send back error message*/
@@ -116,57 +137,72 @@ void handle_request(int client_sock, struct sockaddr *address){
     /*loaded the DNS cache with hostent struct*/
 
     /*fork off a child to process server and client connection*/
-    pid_t pid;
-    int status;
-    if((pid = fork())!=0){
-        waitpid(pid, &status, 0);
+    if(fork()!=0){
         close(client_sock);
         return;
     }
 
     /*connect to requested server using the official host*/
-    if((server_sock = my_open_clientfd(host_cache->hostentry, port)) < 0){
+    if((server_sock = Open_clientfd(host_cache->hostentry->h_name, port)) < 0){
         create_error_response(response_buff, 404, "Not Found");
         Rio_writen(client_sock, response_buff, strlen(response_buff));
         fprintf(stderr, "%s", response_buff);
         close(client_sock);
         exit(0);     
-    }   
-    pid_t pid2;
-    if((pid2 = fork())==0){
+    }
+    fprintf(stderr, "Connect to:\n hostname: %s\n\n", host_cache->hostentry->h_name);
+    pid_t pid;
+    int status;
+    if((pid = fork())==0){
         rio_t rio_server;
         Rio_readinitb(&rio_server, server_sock);        
-        char response_line[MAXLINE];
 
-        Rio_readlineb(&rio_server, response_line, MAXLINE);
-        
-        Rio_writen(client_sock, response_line, strlen(response_line));
-        
-        /*read from server then write to client*/
+        /*Rio_readlineb(&rio_server, response_buff, MAXLINE);        
+        Rio_writen(client_sock, response_buff, strlen(response_buff));
+        fprintf(stderr, "server: %s", response_buff);*/
         char c;
-        fprintf(stderr, "%s", response_line);
-        while(Rio_readnb(&rio_server, &c, 1) > 0  && c!=EOF){
-            Rio_writen(client_sock, &c, 1);
-            fprintf(stderr, "%c", c);       
+        /*read from server then write to client*/
+        /*Rio_readlineb(&rio_server, response_buff, MAXLINE);*/
+        /*strcmp(response_buff, "\r\n") != 0 || 1*/
+        while(Rio_readnb(&rio_server, &c, 1) > 0){
+            /*read from client and write to server*/
+            /*Rio_writen(client_sock, response_buff, strlen(response_buff)); */
+            if(rio_writen(client_sock, &c, 1)==-1)
+                break;
+            fprintf(stderr, "%c", c);
+            /*fprintf(stderr, "server: %s", response_buff); 
+            Rio_readlineb(&rio_server, response_buff, MAXLINE);*/
         }
+        /*write last line of request*/
+        /*Rio_writen(server_sock, response_buff, strlen(response_buff));
+        fprintf(stderr, "server: %s", response_buff);*/
+
         close(client_sock);
         close(server_sock);
         exit(0);
     }
 
-    char request_line[MAXLINE];    
-    sprintf(request_line, "GET /%s %s", path_buff, version_buff);
     /*send request to server*/
-    Rio_writen(server_sock, request_line, strlen(request_line)); 
-    fprintf(stderr, "%s", request_line);
+    sprintf(request_buff, "GET /%s %s", path_buff, version_buff);    
+    Rio_writen(server_sock, request_buff, strlen(request_buff)); 
+    fprintf(stderr, "client: %s", request_buff);
+
     char c;
-    while(Rio_readnb(&rio_client, &c, 1) > 0 && c!=EOF){
+    while(Rio_readnb(&rio_client, &c, 1)>0){
         /*read from client and write to server*/
-        Rio_writen(server_sock, &c, 1); 
-        fprintf(stderr, "%c", c); 
+        /*Rio_writen(server_sock, request_buff, strlen(request_buff)); 
+        fprintf(stderr, "client: %s", request_buff); 
+        Rio_readlineb(&rio_client, request_buff, MAXLINE);*/
+        if(rio_writen(server_sock, &c, 1)==-1)
+            break;
+        fprintf(stderr, "%c", c);
     }
-    fprintf(stderr,"FINISHED CONNECTION");    
-    waitpid(pid2, &status, 0);
+    /*write last line of request*/
+    /*Rio_writen(server_sock, request_buff, strlen(request_buff));
+    fprintf(stderr, "client: %s", request_buff); */
+    fprintf(stderr, "********************WAITING ON CHILD *****************************\n");
+    waitpid(pid, &status, 0);
+    fprintf(stderr,"FINISHED CONNECTION\n");    
     close(client_sock);
     close(server_sock);
     exit(0);
@@ -276,6 +312,19 @@ int my_open_clientfd(struct hostent *cached_host_entry, int port){
     return -1;
     return clientfd;
 }
+
+void read_request_line(char* request_buff, int client_sock){
+    char c;
+    char* it = request_buff;
+    Rio_readn(client_sock, &c, 1);
+    while(c != '\n'){
+        *it = c;
+        it++;
+        Rio_readn(client_sock, &c, 1);
+    }
+    *it = '\n';
+}
+/* 
 
 /*
  * parse_uri - URI parser
