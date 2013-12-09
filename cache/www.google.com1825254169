@@ -1,0 +1,18 @@
+HTTP/1.1 302 Found
+Location: https://www.google.com/
+Cache-Control: private
+Content-Type: text/html; charset=UTF-8
+Set-Cookie: PREF=ID=94b7cd4c8dd72221:FF=0:TM=1386547249:LM=1386547249:S=PYiY-U2wpc9BjDSx; expires=Wed, 09-Dec-2015 00:00:49 GMT; path=/; domain=.google.com
+Set-Cookie: NID=67=vIYM0-7TPKHFvnsaqnhRPJmMRlIxsFFkI9d0RpWyyf1c18uczMTI6MLDyEM_Fba-G2DTCBf2-2K6EPxml8uOOUB0-WISvd10wUUdoouV56lwDavQph2L7d6zpl6JwRF8; expires=Tue, 10-Jun-2014 00:00:49 GMT; path=/; domain=.google.com; HttpOnly
+P3P: CP="This is not a P3P policy! See http://www.google.com/support/accounts/bin/answer.py?hl=en&answer=151657 for more info."
+Date: Mon, 09 Dec 2013 00:00:49 GMT
+Server: gws
+Content-Length:X-XSS-Protection: 1; mode=block
+X-Frame-Options: SAMEORIGIN
+Alternate-Protocol: 80:quic
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>302 Moved</TITLE></HEAD><BODY>
+<H1>302 Moved</H1>
+The document has moved
+<A HREF="https://www.google.com/">here</A>.
+</BODY></HTML>

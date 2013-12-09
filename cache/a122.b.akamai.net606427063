@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+x-amz-id-2: 8tjvc1CeZKCGNuJL6Pdte+dT3ttVk+YCB0HwS3Z9YaMd9DbMC7tpCQy5vwH2Q1TE
+x-amz-request-id: C1C3DC5C3DEBF752
+Expires: Thu, 31 Dec 2037 23:59:59 GMT
+Last-Modified: Thu, 24 Oct 2013 23:01:07 GMT
+ETag: "18a3afc7ab4acd5ac9aba740803ba710"
+Accept-Ranges: bytes
+Content-Type: text/css
+Content-Length: 237
+Server: AmazonS3
+Date: Sun, 08 Dec 2013 22:54:35 GMT
+Connection: keep-alive
+
+footer-parent{background:url(http://c.thumbs.redditmedia.com/UNcO-h_QcS9PD-Gn.jpg) 49% 0% no-repeat;padding-top:150px;margin-top:50px}.rulespage-body .footer-parent,.contact-us-page .footer-parent{background:none;padding:0px;margin:0px}

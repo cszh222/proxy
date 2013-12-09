@@ -1,0 +1,15 @@
+HTTP/1.1 403 Forbidden
+x-amz-request-id: AE24F5DAA78B4AF1
+x-amz-id-2: jJwh6I6S33J2kRhz/fg/ViG3bM9QHQ/gWuprNd4eYS9ggB3u4RFZHR1iQDCLTUg2
+Content-Type: application/xml
+Server: AmazonS3
+Date: Mon, 09 Dec 2013 00:22:37 GMT
+Transfer-Encoding:  chunked
+Connection: close
+Connection: Transfer-Encoding
+
+000000E7
+<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>AE24F5DAA78B4AF1</RequestId><HostId>jJwh6I6S33J2kRhz/fg/ViG3bM9QHQ/gWuprNd4eYS9ggB3u4RFZHR1iQDCLTUg2</HostId></Error>
+00000000
+
