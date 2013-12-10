@@ -177,9 +177,25 @@ void handle_request(int client_sock, struct sockaddr *address){
     /*write to client from cache*/
     if(page_cached ){
         fprintf(stderr, "********************WRITING FROM PAGE CACHE********************\n");
-        int cache_fd;        
-        cache_fd = open_existing_page_cache(page_cache);
-        write_to_client(cache_fd, client_sock);
+        int cache_fd;
+	int size; /*size for log entry*/        
+        int fd;
+	cache_fd = open_existing_page_cache(page_cache);
+        size = write_to_client(cache_fd, client_sock);
+
+	/*Open the log file to write to*/
+	fd = Open("./proxy.log", O_WRONLY | O_APPEND | O_CREAT, S_IRUSR |S_IWUSR | S_IXUSR);
+
+	/*create log statement*/
+	char logstring[MAXLINE]; /*logstring buffer*/
+	format_log_entry(logstring, address, uri_buff, size);
+	
+	/*Write the log statement to file*/
+	Write(fd, logstring, strlen(logstring));
+
+	/*Close file*/
+	Close(fd);
+
 
         close(cache_fd);
         close(client_sock);
@@ -215,11 +231,29 @@ void handle_request(int client_sock, struct sockaddr *address){
     }
 
     /***********************************************************************************/
+    int size;
+    int fd;
     int cache_fd;
     fprintf(stderr, "********************WRITING FROM SERVER**************************\n");
     cache_fd = open_new_page_cache(page_cache, host_cache->hostentry->h_name);
-    write_to_cache_and_client(server_sock, client_sock, cache_fd);       
-        
+    size = write_to_cache_and_client(server_sock, client_sock, cache_fd);         
+	/*Open the log file to write to*/
+	fd = Open("./proxy.log", O_WRONLY | O_APPEND | O_CREAT, S_IRUSR |S_IWUSR | S_IXUSR);
+
+	/*create log statement*/
+	char logstring[MAXLINE]; /*logstring buffer*/
+	format_log_entry(logstring, address, uri_buff, size);
+	
+	/*append size to logstring*/
+	char size_buf[MAXLINE];
+	sprintf(size_buf, " %d\n", size);
+	strcat(logstring, size_buf);
+
+	/*Write the log statement to file*/
+	Write(fd, logstring, strlen(logstring));
+
+	/*Close file*/
+	Close(fd);
     /************************************************************************************/
     
     fprintf(stderr, "********************FINISHED CONNECTION***************************\n");   
@@ -427,7 +461,6 @@ void read_request_line(char* request_buff, int client_sock){
 }
 /* 
 
-/*
  * parse_uri - URI parser
  * 
  * Given a URI from an HTTP proxy GET request (i.e., a URL), extract

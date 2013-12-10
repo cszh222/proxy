@@ -1,0 +1,17 @@
+HTTP/1.0 302 Found
+Location: https://www.google.com/
+Cache-Control: private
+Content-Type: text/html; charset=UTF-8
+Date: Tue, 10 Dec 2013 01:06:39 GMT
+Server: gws
+Content-Length: 220
+X-XSS-Protection: 1; mode=block
+X-Frame-Options: SAMEORIGIN
+Alternate-Protocol: 80:quic
+
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>302 Moved</TITLE></HEAD><BODY>
+<H1>302 Moved</H1>
+The document has moved
+<A HREF="https://www.google.com/">here</A>.
+</BODY></HTML>

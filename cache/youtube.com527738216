@@ -1,0 +1,9 @@
+HTTP/1.0 301 Moved Permanently
+Date: Tue, 10 Dec 2013 01:26:40 GMT
+Server: gwiseguy/2.0
+Location: http://www.youtube.com/
+Content-Length: 0
+Content-Type: text/html
+X-XSS-Protection: 1; mode=block
+Alternate-Protocol: 80:quic
+
