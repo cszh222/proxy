@@ -1,7 +1,0 @@
-HTTP/1.1 200 OK
-Date: Mon, 09 Dec 2013 23:45:33 GMT
-Server: Apache/2.2.14 (Ubuntu)
-Connection: close
-Content-Type: text/xml
-
-<?xml version="1.0" encoding="UTF-8"?><Response><Ip>74.138.82.192</Ip><Status>OK</Status><CountryCode>US</CountryCode><CountryCode3>USA</CountryCode3><CountryName>United States</CountryName><RegionCode>None</RegionCode><RegionName>None</RegionName><City>None</City><ZipPostalCode></ZipPostalCode><Latitude>38.0000</Latitude><Longitude>-97.0000</Longitude><AreaCode>0</AreaCode><TimeZone>None</TimeZone></Response>

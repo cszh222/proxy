@@ -1,9 +1,0 @@
-HTTP/1.1 304 Not Modified
-Date: Mon, 09 Dec 2013 21:34:03 GMT
-Expires: Mon, 09 Dec 2013 21:34:03 GMT
-Cache-Control: public, max-age=0
-X-Content-Type-Options: nosniff
-Server: sffe
-X-XSS-Protection: 1; mode=block
-Alternate-Protocol: 80:quic
-

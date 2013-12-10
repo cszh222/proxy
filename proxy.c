@@ -17,20 +17,20 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-typedef struct{
+struct DNScache{
     char *hostname;
     struct hostent *hostentry;
     struct DNScache *next;
-} DNScache;
+};
 
-typedef struct {
+struct pageCache{
     char *full_uri;
     char *filename;
     struct pageCache *next;
-}pageCache;
+};
 
-pageCache *pageCacheStart;
-DNScache *DNSListStart;
+struct pageCache *pageCacheStart;
+struct DNScache *DNSListStart;
 
 /*
  * Function prototypes
@@ -39,16 +39,16 @@ int parse_uri(char *uri, char *target_addr, char *path, int  *port);
 void format_log_entry(char *logstring, struct sockaddr_in *sockaddr, char *uri, int size);
 void handle_request(int client_sock, struct sockaddr *address);
 int get_uri(char *request_buff, char *method_buff, char *uri_buff, char *version_buff);
+int get_status(char *first_response);
 void create_error_response(char* response_buff, int status, char* status_message);
-DNScache* find_cache_in_list(char* host_name);
-DNScache* add_cache_to_list(char* host_name);
+struct DNScache* find_cache_in_list(char* host_name);
+struct DNScache* add_cache_to_list(char* host_name);
 int my_open_clientfd(struct hostent *cached_host_entry, int port);
-pageCache* find_page_cache(char *uri);
-pageCache* create_page_cache(char *uri);
-int open_existing_page_cache(pageCache *cache_entry);
-int open_new_page_cache(pageCache *cache_entry, char *hostname);
-int write_to_client(int cache_fd, int client_sock);
-int write_to_cache_and_client(int server_sock,int client_sock, int cache_fd);
+struct pageCache* find_page_cache(char *uri);
+struct pageCache* create_page_cache(char *uri);
+int open_existing_page_cache(struct pageCache *cache_entry);
+int open_new_page_cache(struct pageCache *cache_entry, char *hostname);
+void write_to_log(char* logstring, int size, bool dns_cached, bool page_cached, bool not_found);
 /*void read_request_line(char* request_buff, int client_sock);*/
 /* 
  * main - Main routine for the proxy program 
@@ -71,38 +71,32 @@ int main(int argc, char **argv)
     /* open listening socket */
     int proxy_sock = Open_listenfd(port);
 
-    /* socket struct */
-    struct sockaddr addr;
-    socklen_t socklen = sizeof(addr); 
-
     /*seed for random number needed later*/
     srand(time(NULL));
 
-    int status;
     /*loop infinitely waiting on client*/
     while(1)
-    {
-       /* Wait for a connection. */
-       int client_sock = Accept(proxy_sock, &addr, &socklen);
-
-       if(client_sock>0)       
-          handle_request(client_sock, &addr);/*handle request from the client*/
+    {   
+        int client_sock;
+        struct sockaddr addr;
+        socklen_t socklen; 
        
-       while(wait3(&status, WNOHANG, NULL)>0);     
+        /* Wait for a connection. */
+        client_sock = Accept(proxy_sock, &addr, &socklen);
+
+        handle_request(client_sock, &addr);
+
+        pid_t pid = 1;
+        while(pid > 0){
+            pid = waitpid(-1, NULL, WNOHANG);
+        }      
     }
 
     exit(0);
 }
 
 void handle_request(int client_sock, struct sockaddr *address){
-    if(fork()!=0)
-        return;
-    /*port number of request uri*/
-    int port;
-    int server_sock;
-    
-    char method_buff[MAXLINE];
-    bzero(method_buff, MAXLINE);
+    /*buffers*/
     char request_buff[MAXLINE];
     bzero(request_buff, MAXLINE);
     char uri_buff[MAXLINE];
@@ -113,193 +107,244 @@ void handle_request(int client_sock, struct sockaddr *address){
     bzero(host_buff, MAXLINE);
     char path_buff[MAXLINE];
     bzero(path_buff, MAXLINE);
+    char method_buff[MAXLINE];
+    bzero(method_buff, MAXLINE);
     char response_buff[MAXLINE];
     bzero(response_buff, MAXLINE);
 
+    /*flags for dns_cache and page cache*/
     bool dns_cached = false;
     bool page_cached = false;
+    bool not_found = false;
 
     /* initialize rio for client*/
     rio_t rio_client;
     Rio_readinitb(&rio_client, client_sock);
 
-    /*read the first line of the request*/
-    Rio_readlineb(&rio_client,request_buff,MAXLINE);
-    if(strcmp(request_buff, "") == 0)
-        exit(0);
-    /*read_request_line(request_buff, client_sock);*/
-    fprintf(stderr, "Request: %s\n", request_buff);
+    /*read first line*/
+    ssize_t read_size;
+    read_size = Rio_readlineb(&rio_client, (void *)request_buff, (size_t)MAXLINE);
+
+    /*check that request isnt empty*/
+    if(read_size <= 0)
+        return;
+
     /*get the uri from request*/
     if(get_uri(request_buff, method_buff, uri_buff, version_buff) == -1){
         /* Bad request, send back error message*/
         create_error_response(response_buff, 400, "Bad Request");
         Rio_writen(client_sock, response_buff, strlen(response_buff));
         close(client_sock);
-        exit(0);      
+        return;      
     }
 
-    /*only allow get methods*/
-    if(strcmp(method_buff, "GET")!=0){
-        create_error_response(response_buff, 400, "Bad Request");
-        Rio_writen(client_sock, response_buff, strlen(response_buff));
+    /*chech that it is a get request, only allow get methods*/
+    if(strncmp(method_buff, "GET", 3)!=0){
         close(client_sock);
-        exit(0);
+        return;
     }
 
+    int port;
     /*parse the uri*/
     if(parse_uri(uri_buff, host_buff, path_buff, &port) == -1){
         /* Invalid uri, send back error message*/
         create_error_response(response_buff, 400, "Bad Request");
         Rio_writen(client_sock, response_buff, strlen(response_buff));
         close(client_sock); 
-        exit(0);      
-    }
-        
-    /*have separated uri into host, path and port*/
-    /*see if host is in cache*/
-    DNScache *host_cache = find_cache_in_list(host_buff);
+        return;      
+    }/*have separated uri into host, path and port*/
+
+    struct DNScache *host_cache = find_cache_in_list(host_buff);
     if(host_cache == NULL)
         host_cache = add_cache_to_list(host_buff);
     else{
         dns_cached = true;
-        fprintf(stderr,"********************DNS LOADED FROM CACHE*************************\n");
+        fprintf(stderr,"********************DNS CAN BE LOADED FROM CACHE*********************\n");
     }
 
-    pageCache *page_cache = find_page_cache(uri_buff);
+    int cache_fd;
+    int server_sock;
+    /*see if page is in cache*/
+    struct pageCache *page_cache = find_page_cache(uri_buff);
     if(page_cache == NULL){
         page_cache = create_page_cache(uri_buff);
+        cache_fd = open_new_page_cache(page_cache, host_cache->hostname);
+
+        if((server_sock = my_open_clientfd(host_cache->hostentry, port)) < 0){
+            create_error_response(response_buff, 404, "Not Found");
+            Rio_writen(client_sock, response_buff, strlen(response_buff));
+            close(client_sock);
+            return;     
+        }
     }
     else{
         page_cached = true;
+        cache_fd = open_existing_page_cache(page_cache);
         fprintf(stderr,"********************PAGE CAN BE LOADED FROM CACHE********************\n");
     }    
 
-    /*write to client from cache*/
-    if(page_cached ){
-        fprintf(stderr, "********************WRITING FROM PAGE CACHE********************\n");
-        int cache_fd;
-	int size; /*size for log entry*/        
-        int fd;
-	cache_fd = open_existing_page_cache(page_cache);
-        size = write_to_client(cache_fd, client_sock);
+    /*has loaded page cache and DNS cache, now fork*/
+    pid_t pid = Fork();
+    if(pid != 0){
+        Close(client_sock);        
+        Close(cache_fd);
+        if(!page_cached)
+            Close(server_sock);
+        return;
+    }
 
-	/*Open the log file to write to*/
-	fd = Open("./proxy.log", O_WRONLY | O_APPEND | O_CREAT, S_IRUSR |S_IWUSR | S_IXUSR);
+    /*page is not cached, read from server*/
+    if(!page_cached){       
 
-	/*create log statement*/
-	char logstring[MAXLINE]; /*logstring buffer*/
-	format_log_entry(logstring, address, uri_buff, size);
-	
-	/*Write the log statement to file*/
-	Write(fd, logstring, strlen(logstring));
+        /*write first line of request to server*/
+        snprintf(request_buff, MAXLINE, "GET /%s HTTP/1.0\r\n", path_buff);    
+        Rio_writen(server_sock, request_buff, strlen(request_buff)); 
 
-	/*Close file*/
-	Close(fd);
+        while((read_size = Rio_readlineb(&rio_client, (void *)request_buff, (size_t)MAXLINE)) > 0){
+            Rio_writen(server_sock, request_buff, read_size);
+            
+            if(strncmp(request_buff, "\r\n", 2) == 0)
+                break;
+            
+        }/*request has been sent*/
+        fprintf(stderr,"********************FINISHED SENDING FULL REQUEST TO SERVER**********\n");
 
+        /*initialize rio for server*/
+        rio_t rio_server;
+        Rio_readinitb(&rio_server, server_sock);
+        
+        ssize_t write_size;
+        char first_line[MAXLINE];
+        /*read first line*/        
+        write_size = Rio_readlineb(&rio_server, (void *)first_line, (size_t)MAXLINE);
+        strncpy(response_buff, first_line, write_size);
 
-        close(cache_fd);
-        close(client_sock);
+        int status;
+        /*get the status*/
+        status = get_status(first_line);
+        if(status == 404)
+            not_found = true;
+        
+        /*write first line to client and cache*/
+        Rio_writen(client_sock, response_buff, write_size);
+        Rio_writen(cache_fd, response_buff, write_size);
+
+        timer_t start = (timer_t) time(NULL);
+        timer_t end;
+        /*write rest to client and cache*/
+        while((read_size = Rio_readlineb(&rio_server,(void *)response_buff, (size_t)MAXLINE)) > 0){
+            write_size += read_size;
+            Rio_writen(client_sock, response_buff, read_size);
+            Rio_writen(cache_fd, response_buff, read_size);
+
+            //stop sending after 15 seconds
+            end = (timer_t) time(NULL);
+            if((end - start) >=15)
+                break;
+        }
+        fprintf(stderr,"********************FINISHED WRITING TO CLIENT FROM SERVER***********\n");
+        Close(client_sock);
+        Close(cache_fd);
+        Close(server_sock);
+
+        char logstring[MAXLINE];
+        format_log_entry(logstring, (struct sockaddr_in*) address, uri_buff, write_size);
+        write_to_log(logstring, write_size, dns_cached, page_cached, not_found);
+
         exit(0);
     }
 
-    /*connect to requested server using the official host, only if page is not cached*/  
-    if((server_sock = my_open_clientfd(host_cache->hostentry, port)) < 0){
-        create_error_response(response_buff, 404, "Not Found");
-        Rio_writen(client_sock, response_buff, strlen(response_buff));
-        fprintf(stderr, "%s", response_buff);
-        close(client_sock);
-        exit(0);     
+    ssize_t write_size = 0;
+    /*create a rio_t for cache file*/
+    rio_t rio_cache;
+    Rio_readinitb(&rio_cache, cache_fd);
+
+    while((read_size = Rio_readlineb(&rio_cache, response_buff, MAXLINE)) > 0){
+        write_size += read_size;
+        Rio_writen(client_sock, response_buff, read_size);
     }
-
-    fprintf(stderr, "Connect to:\n hostname: %s\n\n", host_cache->hostentry->h_name);
-
-    /*send request to server*/
-    sprintf(request_buff, "%s /%s HTTP/1.0\r\n", method_buff, path_buff);    
-    Rio_writen(server_sock, request_buff, strlen(request_buff)); 
-    fprintf(stderr, "client: %s", request_buff);
-
-    /*char c;*/
-    /*int CLRF_state = 0;*/
-    while(Rio_readlineb(&rio_client, request_buff, MAXLINE)>0){
-        /*read from client and write to server*/
-        Rio_writen(server_sock, request_buff, strlen(request_buff));
-        /*fprintf(stderr, "%s", request_buff);*/
-        if(strncmp(request_buff, "\r\n", 2) == 0)
-            break;
-        /*check for CRLF CRLF*/
-        /*CLRF_state = CLRF_detector(c, CLRF_state);*/
-    }
-
-    /***********************************************************************************/
-    int size;
-    int fd;
-    int cache_fd;
-    fprintf(stderr, "********************WRITING FROM SERVER**************************\n");
-    cache_fd = open_new_page_cache(page_cache, host_cache->hostentry->h_name);
-    size = write_to_cache_and_client(server_sock, client_sock, cache_fd);         
-	/*Open the log file to write to*/
-	fd = Open("./proxy.log", O_WRONLY | O_APPEND | O_CREAT, S_IRUSR |S_IWUSR | S_IXUSR);
-
-	/*create log statement*/
-	char logstring[MAXLINE]; /*logstring buffer*/
-	format_log_entry(logstring, address, uri_buff, size);
-	
-	/*append size to logstring*/
-	char size_buf[MAXLINE];
-	sprintf(size_buf, " %d\n", size);
-	strcat(logstring, size_buf);
-
-	/*Write the log statement to file*/
-	Write(fd, logstring, strlen(logstring));
-
-	/*Close file*/
-	Close(fd);
-    /************************************************************************************/
     
-    fprintf(stderr, "********************FINISHED CONNECTION***************************\n");   
-    close(client_sock);
-    close(server_sock);
-    exit(0);
+    fprintf(stderr,"********************FINISHED WRITING TO CLIENT FROM CACHE*************\n");
+    Close(client_sock);
+    Close(cache_fd);    
+
+    char logstring[MAXLINE];
+    format_log_entry(logstring, (struct sockaddr_in*) address, uri_buff, write_size);
+    write_to_log(logstring, write_size, dns_cached, page_cached, not_found);
+
+    exit(0);    
+
 }
 
-int open_existing_page_cache(pageCache *cache_entry){
+void write_to_log(char* logstring, int size, bool dns_cached, bool page_cached, bool not_found){
     int fd;
-    fd = Open(cache_entry->filename, O_RDONLY, S_IRUSR);
+    char size_buff[MAXLINE];
+    char log_buff[MAXLINE];
+    
+    strncpy(log_buff, logstring, strlen(logstring));
+    /*append to log_buff*/
+    if(not_found)
+        strncat(log_buff, " (NOT FOUND)", strlen(" (NOT FOUND)"));
+    else{
+        sprintf(size_buff, " %d", size);
+        strncat(log_buff, size_buff, strlen(size_buff));
+        if(dns_cached)
+            strncat(log_buff, " (HOSTNAME CACHED)", strlen(" (HOSTNAME CACHED)"));
+        if(page_cached)
+            strncat(log_buff, " (PAGE CACHED)", strlen(" (PAGE CACHED)"));
+    }
+    strncat(log_buff, "\n", 1);
+
+    fd = Open("./proxy.log", O_WRONLY | O_APPEND | O_CREAT,
+     S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+
+    Write(fd, log_buff, strlen(log_buff));
+
+    Close(fd);
+}
+
+int open_existing_page_cache(struct pageCache *cache_entry){
+    int fd;
+    fd = Open(cache_entry->filename, O_RDONLY, 
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
     return fd;
 }
 
-int open_new_page_cache(pageCache *cache_entry, char *hostname){
+int open_new_page_cache(struct pageCache *cache_entry, char *hostname){
     int fd;
     char file_path[MAXLINE];
     char random[MAXLINE];
-    sprintf(random, "%d", rand());
+    snprintf(random, MAXLINE, "%d", rand());
     strcpy(file_path, "cache/");
     strncat(file_path, hostname, strlen(hostname));
     strncat(file_path, random, strlen(random));
     cache_entry->filename = strdup(file_path);
-    fd = Open(file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    fd = Open(file_path, 
+        O_WRONLY | O_CREAT | O_TRUNC, 
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
     return fd;
 }
 
-pageCache* find_page_cache(char *uri){
+struct pageCache* find_page_cache(char *uri){
     if(pageCacheStart == NULL)
         return NULL;
-    pageCache *cur_cache = pageCacheStart;
-    pageCache *found_cache = NULL;
+    struct pageCache *cur_cache = pageCacheStart;
+    struct pageCache *found_cache = NULL;
 
     do {
-        if(strcmp(cur_cache->full_uri, uri) == 0)
+        if(strcmp(cur_cache->full_uri, uri) == 0){
             found_cache = cur_cache;
-    }while((cur_cache = (pageCache*)cur_cache->next) != NULL);
+            break;
+        }
+    }while((cur_cache = cur_cache->next) != NULL);
     return found_cache;
 }
 
-pageCache* create_page_cache(char *uri){
-    pageCache *new_cache = (pageCache*)malloc(sizeof(pageCache));
+struct pageCache* create_page_cache(char *uri){
+    struct pageCache *new_cache = (struct pageCache*)malloc(sizeof(struct pageCache));
     new_cache->full_uri = strdup(uri);
-
     new_cache->filename = NULL;
     new_cache->next = NULL;
 
@@ -308,39 +353,24 @@ pageCache* create_page_cache(char *uri){
         return new_cache;
     }
     /*iterate to back of list*/
-    pageCache *cur_cache = pageCacheStart;
+    struct pageCache *cur_cache = pageCacheStart;
     while(cur_cache->next != NULL)
-       cur_cache = (pageCache*)cur_cache->next;
-    cur_cache->next = (struct pageCache*)new_cache;
+       cur_cache = cur_cache->next;
+    cur_cache->next = new_cache;
 
     return new_cache;
 }
+int get_status(char *first_response){
+    char *status_str;
+    int status;
+    /*get the status from the respnse*/
+    strtok(first_response, " ");
+    status_str = strtok(NULL, " ");
 
-int write_to_cache_and_client(int server_sock, int client_sock, int cache_fd){ 
-    /*intialize rio buffer for reading*/
-    int size = 0;
-    rio_t rio_read;
-    Rio_readinitb(&rio_read, server_sock);
-    char response_buff[MAXLINE];
-    while(Rio_readlineb(&rio_read, response_buff, MAXLINE)> 0){
-        Rio_writen(client_sock, response_buff, strlen(response_buff));
-        Rio_writen(cache_fd, response_buff, strlen(response_buff));
-        size += strlen(response_buff);
-    }
-    
-    fprintf(stderr, "****************SENT ALL STUFFS******************\n");
-    return size;
+    status = atoi(status_str);
+
+    return status;
 }
-
-int write_to_client(int cache_fd, int client_sock){
-    fprintf(stderr, "IN WRITE TO CLIENT\n");
-    char c;
-    while(Read(cache_fd, &c, 1) > 0 ){
-        if(rio_writen(client_sock, &c, 1)==-1)
-            break;
-    } 
-    return 0;
-} 
 
 int get_uri(char *request_buff,char *method_buff, char *uri_buff, char *version_buff){
     /*request is null*/
@@ -358,12 +388,7 @@ int get_uri(char *request_buff,char *method_buff, char *uri_buff, char *version_
     strncpy(method_buff, method, strlen(method));
     /*copy uri and version to buffer*/
     strncpy(uri_buff,uri,strlen(uri));
-    /*this is added because strpbrk does not search terminating null-character*/
-    /*needed for parse_uri to parse correctly*/
-    if(uri_buff[strlen(uri)-1] != '/'){
-        uri_buff[strlen(uri)] = '/';
-        uri_buff[strlen(uri)+1] = '\0';
-    }
+
     strncpy(version_buff,version,strlen(version));
 
     return 0;
@@ -374,39 +399,40 @@ void create_error_response(char* response_buff, int status, char* status_message
     char response_header[MAXLINE];
     
     //create error response body
-    sprintf(response_body,
+    snprintf(response_body, MAXLINE,
         "<html><head><title>%s</title></head><body>%d %s</body></html>",
         status_message, status, status_message);
 
     //create error response header
-    sprintf(response_header,
+    snprintf(response_header, MAXLINE,
         "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length: %d",
         status, status_message, strlen(response_body));
 
-    sprintf(response_buff, "%s\r\n\r\n%s", response_header, response_body);
+    snprintf(response_buff, MAXLINE, "%s\r\n\r\n%s", response_header, response_body);
 
     return;
 }
 
-DNScache* find_cache_in_list(char* host_name){
+struct DNScache* find_cache_in_list(char* host_name){
     if(DNSListStart == NULL)
         return NULL;
-    DNScache *cur_cache = DNSListStart;
-    DNScache *found_cache = NULL;
+    struct DNScache *cur_cache = DNSListStart;
+    struct DNScache *found_cache = NULL;
 
     do {
-        if(strcmp(cur_cache->hostname, host_name) == 0)
+        if(strcmp(cur_cache->hostname, host_name) == 0){
             found_cache = cur_cache;
-    }while((cur_cache = (DNScache*)cur_cache->next) != NULL);
+            break;
+        }
+    }while((cur_cache = cur_cache->next) != NULL);
     return found_cache;
 }
 
-DNScache* add_cache_to_list(char* host_name){
-    DNScache *new_cache = (DNScache*)malloc(sizeof(DNScache));
+struct DNScache* add_cache_to_list(char* host_name){
+    struct DNScache *new_cache = (struct DNScache*)malloc(sizeof(struct DNScache));
     new_cache->hostname = strdup(host_name);
 
     struct hostent *new_hostent = Gethostbyname(host_name);
-    fprintf(stderr, "HERE");
     new_cache->hostentry = new_hostent;
     new_cache->next = NULL;
 
@@ -415,10 +441,10 @@ DNScache* add_cache_to_list(char* host_name){
         return new_cache;
     }
     /*iterate to back of list*/
-    DNScache *cur_cache = DNSListStart;
+    struct DNScache *cur_cache = DNSListStart;
     while(cur_cache->next != NULL)
-       cur_cache = (DNScache*)cur_cache->next;
-    cur_cache->next = (struct DNScache*)new_cache;
+       cur_cache = cur_cache->next;
+    cur_cache->next = new_cache;
 
     return new_cache;
 }
@@ -448,19 +474,7 @@ int my_open_clientfd(struct hostent *cached_host_entry, int port){
     return clientfd;
 }
 
-void read_request_line(char* request_buff, int client_sock){
-    char c;
-    char* it = request_buff;
-    Rio_readn(client_sock, &c, 1);
-    while(c != '\n'){
-        *it = c;
-        it++;
-        Rio_readn(client_sock, &c, 1);
-    }
-    *it = '\n';
-}
-/* 
-
+/*
  * parse_uri - URI parser
  * 
  * Given a URI from an HTTP proxy GET request (i.e., a URL), extract
