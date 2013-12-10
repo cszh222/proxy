@@ -1,0 +1,15 @@
+HTTP/1.0 301 Moved Permanently
+Cache-Control: private, no-cache, no-store, must-revalidate
+Expires: Sat, 01 Jan 2000 00:00:00 GMT
+Location: https://www.facebook.com/
+P3P: CP="Facebook does not have a P3P policy. Learn why here: http://fb.me/p3p"
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Set-Cookie: datr=91amUsLMRD8ThGOifl7-lhFi; expires=Wed, 09-Dec-2015 23:49:11 GMT; path=/; domain=.facebook.com; httponly
+Content-Type: text/html; charset=utf-8
+X-FB-Debug: v3oeRN0GIgJg/gqRmdVYYHGThbOyERt5klQeRUCdj0A=
+Date: Mon, 09 Dec 2013 23:49:11 GMT
+Connection: close
+Content-Length: 0
+

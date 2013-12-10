@@ -1,0 +1,24 @@
+HTTP/1.1 404 Not Found
+Content-Type: text/html; charset=UTF-8
+X-Varnish: 869313660, 3902161125
+Via: 1.1 varnish, 1.1 varnish
+Content-Length: 239
+Accept-Ranges: bytes
+Date: Mon, 09 Dec 2013 23:49:27 GMT
+Age: 0
+Connection: close
+X-Cache: cp1048 miss (0), cp1061 frontend miss (0)
+Access-Control-Allow-Origin: *
+
+<html>
+ <head>
+  <title>404 Not Found</title>
+ </head>
+ <body>
+  <h1>404 Not Found</h1>
+  The resource could not be found.<br /><br />
+File not found: /v1/AUTH_mw/wikipedia-meta-local-public/f/f2/Meta-logo_sister_1x.png/
+
+
+ </body>
+</html>

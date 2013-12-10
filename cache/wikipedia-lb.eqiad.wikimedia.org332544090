@@ -1,0 +1,18 @@
+HTTP/1.1 304 Not Modified
+Server: Apache
+X-Powered-By: PHP/5.3.10-1ubuntu3.8+wmf2
+X-Content-Type-Options: nosniff
+Cache-control: s-maxage=3600, must-revalidate, max-age=0
+Last-modified: Thu, 5 Dec 2013 06:19:56 GMT
+Content-Encoding: gzip
+Vary: Accept-Encoding
+X-Vary-Options: Accept-Encoding;list-contains=gzip
+Content-Type: text/html; charset=utf-8
+X-Varnish: 2166472587 2166472248, 4092066609 4081639157
+Via: 1.1 varnish, 1.1 varnish
+Accept-Ranges: bytes
+Date: Tue, 10 Dec 2013 00:10:44 GMT
+Age: 3377
+Connection: close
+X-Cache: cp1055 hit (3), cp1066 frontend hit (27316)
+
