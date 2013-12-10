@@ -1,12 +1,16 @@
 ****************
-CS:APP Proxy Lab
+CS:APP Proxy Project
 ****************
+Authors:
+Julia Welch
+Chang Zheng
 
 Makefile	- For building and handing in proxy
 README		- This file
 
 # Proxy source files
-proxy.{c,h}	- Primary proxy code
+proxy.c - Primary proxy code
 csapp.{c,h}	- Wrapper and helper functions from the CS:APP text
 
-
+# Documentation file
+DOCUMENTATION - Contails documentation, features and limitations of the proxy

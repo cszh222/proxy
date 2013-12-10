@@ -229,18 +229,20 @@ void handle_request(int client_sock, struct sockaddr *address){
         Rio_writen(client_sock, response_buff, write_size);
         Rio_writen(cache_fd, response_buff, write_size);
 
-        timer_t start = (timer_t) time(NULL);
-        timer_t end;
+        time_t start = time(NULL);
+        time_t end;
         /*write rest to client and cache*/
         while((read_size = Rio_readlineb(&rio_server,(void *)response_buff, (size_t)MAXLINE)) > 0){
             write_size += read_size;
             Rio_writen(client_sock, response_buff, read_size);
             Rio_writen(cache_fd, response_buff, read_size);
 
-            //stop sending after 15 seconds
-            end = (timer_t) time(NULL);
-            if((end - start) >=15)
-                break;
+            //stop sending after 30 seconds
+            end = time(NULL);
+            if(difftime(end, start) >= 30.0){
+                fprintf(stderr, "TIMED OUT!!!!!!!!!!!!!!!\n");
+		break;
+	    }
         }
         fprintf(stderr,"********************FINISHED WRITING TO CLIENT FROM SERVER***********\n");
         Close(client_sock);
@@ -264,7 +266,7 @@ void handle_request(int client_sock, struct sockaddr *address){
         Rio_writen(client_sock, response_buff, read_size);
     }
     
-    fprintf(stderr,"********************FINISHED WRITING TO CLIENT FROM CACHE*************\n");
+    fprintf(stderr,"********************FINISHED WRITING TO CLIENT FROM CACHE**************\n");
     Close(client_sock);
     Close(cache_fd);    
 

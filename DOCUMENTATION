@@ -1,0 +1,58 @@
+This is the documentation for the CS:APP proxy project. 
+This project was create for CS 485 001 Systems Programming.
+This project implements a basic caching web proxy. The proxy will
+listen to a request form a client (browser or telnet), parse the 
+request and retireve the requested web page and send it back to 
+the client. The proxy will cache the host information of each request 
+so later requests do not require retrieving host entry from a DNS system.
+The proxy will also cache the web page itself as a file on the file, 
+this allow the proxy to send the web page back to the client from
+the file instead of retrieving it from a web server.
+
+Features:
+DNS caching - cache the DNS host name to IP addres mappings. 
+	This is done by saving the struct hostent, returned by Gethostbyname(),
+	into a linked list of DNS hosts. When ever a client sends a request,
+	the proxy will first search the list for a matching hostent If it is
+	found, then the hostent will be used for connection to the server. If it
+	is not found, the proxy will find the hostent from a DNS system, 
+	store it to the list and used it for a connection.
+Page caching - cache the data retrieved from the server.
+	This is done by saving the request uri the client sent into struct pageCache.
+	The struct stores the request uri as well as the filename on disk. Struct pageCache
+	is implemented as a linked list. The proxy would use the request 
+	uri to find a matching struct pageCache in the list. If it is found, the proxy
+	will send back the contents of the file. If it is not found, a new pageCache 
+	will be allocated and added to the list with the request uri and a new filename.
+	The filename is the request hostname retrieved earlier, either from DNS cache
+	or DNS system, followed by a random number. Then the proxy will connect to
+	the web server and write to the client and the new file at the same time.
+Logging - the proxy logs all requests in proxy.log. 
+	The log stores the following:
+		Date: date and time of request
+		Browser IP: IP address of the client
+		URL: the full request uri
+		Size: the size of the response if the page was available\
+		Page Cache: logged if the page was cached
+		Hostname Cache: logged if the hostname was cached
+		Notfound: logged if the page was not found, (404 from the server)
+
+Limitations:
+	- The proxy uses HTTP/1.0 instead of HTTP/1.1. HTTP/1.1 allows persistant
+	  connection which causes the proxy to hang.
+	- The proxy only accepts GET requests. 
+	- The proxy will close connection from the server after 30 seconds.
+	  This is implemented to prevent hanging. The proxy appeared to be hanging
+	  when reading server. All data seem to be read, but the proxy still tries
+	  to read more data. This happens even with HTTP/1.0.
+	- Unknown behavior with Mozilla Firefox. Firefox appears to be having problems
+	  connecting to the proxy. Majority of time, the web page will not load. 
+	  Occationally it will load, but with incorrect page formatting.
+	- General unknown behavior. The proxy will occationally hang and not load pages.
+	  Restarting the proxy will then allow pages to loaded again with the same request.
+	- Can only handle 1 request at a time until the request forks to communicate with
+	  server. This is because both the DNS and cache page filenames are stored in
+	  memory. Inserting new cache into the lists must be done in the parent. This causes
+	  some initial sluggishnes when trying to load a page. Searching through the cache
+	  also takes more time as the list grows. A better approach would be to use a hash
+	  or a binary tree.
