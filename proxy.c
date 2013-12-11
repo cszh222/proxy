@@ -2,12 +2,15 @@
  * proxy.c - CS:APP Web proxy
  *
  * TEAM MEMBERS: (put your names here)
- *     Student Name1, student1@cs.uky.edu 
- *     Student Name2, student2@cs.uky.edu 
+ *     Student Chang Zheng, cszh222@uky.edu 
+ *     Student Julia Welch, julia.welch@uky.edu 
  * 
- * IMPORTANT: Give a high level description of your code here. You
- * must also provide a header comment at the beginning of each
- * function that describes what that function does.
+ * This project implements a basic caching web proxy. It listens to a request from a client (browser or telnet), 
+ * parses the request and retrieves the requested web page to send back to the client. The proxy cashes the host 
+ * information of each request which means that it doesn't have to retrieve the host entry from the DNS system 
+ * when there is a request for that page later. Additionally, the proxy caches the page as a file so the it can 
+ * send the file back to the client instead of retrieving from the server if it is requested again.
+ * 
  */ 
 
 #include "csapp.h"
@@ -17,12 +20,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+/* struct with required variables for DNS caching */
 struct DNScache{
     char *hostname;
     struct hostent *hostentry;
     struct DNScache *next;
 };
 
+/* struct with required variables for page caching */
 struct pageCache{
     char *full_uri;
     char *filename;
@@ -50,8 +55,11 @@ int open_existing_page_cache(struct pageCache *cache_entry);
 int open_new_page_cache(struct pageCache *cache_entry, char *hostname);
 void write_to_log(char* logstring, int size, bool dns_cached, bool page_cached, bool not_found);
 /*void read_request_line(char* request_buff, int client_sock);*/
+
 /* 
- * main - Main routine for the proxy program 
+ * main - Main routine for the proxy program. If no port is specified, sets the port to 15213 then 
+ * opens the socket to begin waiting for a request (will wait indefinitely until the user says to stop). 
+ * Once a request is received, handle_request() is called. 
  */
 int main(int argc, char **argv)
 {   
@@ -95,6 +103,16 @@ int main(int argc, char **argv)
     exit(0);
 }
 
+/* handle_request - This function handles the request from the client. 
+ * It reads the first line of the request and if not empty, the
+ * function gets the uri from the request and then parses the uri to
+ * get the hostname, path and port (assuming the request is a GET 
+ * request). Then, if the page has been cached it will load the cached
+ * version of the page. If the DNS hasn't been cached yet, it adds it to * the linked list (the same happens if the page hasn't been cached).
+ * If the page isn't  already cached, the response is read from the
+ * server and sent to the client, then the request is logged and the 
+ * sockets are closed.
+ */
 void handle_request(int client_sock, struct sockaddr *address){
     /*buffers*/
     char request_buff[MAXLINE];
@@ -138,7 +156,7 @@ void handle_request(int client_sock, struct sockaddr *address){
         return;      
     }
 
-    /*chech that it is a get request, only allow get methods*/
+    /*check that it is a get request, only allow get methods*/
     if(strncmp(method_buff, "GET", 3)!=0){
         close(client_sock);
         return;
@@ -278,6 +296,13 @@ void handle_request(int client_sock, struct sockaddr *address){
 
 }
 
+/* write_to_log - This function writes the given information to the
+ * file proxy.log. It takes the already-formatted logstring, the 
+ * size of the request, whether or not the dns/page has been cached,
+ * and if the request was found (url existed). It then appends the
+ * information together, opens proxy.log, writes to the file and then
+ * closes the file.
+ */
 void write_to_log(char* logstring, int size, bool dns_cached, bool page_cached, bool not_found){
     int fd;
     char size_buff[MAXLINE];
@@ -305,6 +330,9 @@ void write_to_log(char* logstring, int size, bool dns_cached, bool page_cached, 
     Close(fd);
 }
 
+/* open_existing_page_cache - This function opens pages that have
+ * already been cached by the proxy
+ */
 int open_existing_page_cache(struct pageCache *cache_entry){
     int fd;
     fd = Open(cache_entry->filename, O_RDONLY, 
@@ -313,6 +341,9 @@ int open_existing_page_cache(struct pageCache *cache_entry){
     return fd;
 }
 
+/* open_new_page_cache - This function opens a new file to write to
+ * so that the page can be cached.
+ */
 int open_new_page_cache(struct pageCache *cache_entry, char *hostname){
     int fd;
     char file_path[MAXLINE];
@@ -329,6 +360,10 @@ int open_new_page_cache(struct pageCache *cache_entry, char *hostname){
     return fd;
 }
 
+/* find_page_cache - This function goes through the linked list of
+ * page caches to see if the page being requested has already been 
+ * cached.
+ */
 struct pageCache* find_page_cache(char *uri){
     if(pageCacheStart == NULL)
         return NULL;
@@ -344,6 +379,9 @@ struct pageCache* find_page_cache(char *uri){
     return found_cache;
 }
 
+/* create_page_cache - This function creates the page cache, placing
+ * the cache on the back of the linked list of page caches.
+ */
 struct pageCache* create_page_cache(char *uri){
     struct pageCache *new_cache = (struct pageCache*)malloc(sizeof(struct pageCache));
     new_cache->full_uri = strdup(uri);
@@ -362,6 +400,8 @@ struct pageCache* create_page_cache(char *uri){
 
     return new_cache;
 }
+
+/* get_status - This function gets the status from the response */
 int get_status(char *first_response){
     char *status_str;
     int status;
@@ -374,6 +414,9 @@ int get_status(char *first_response){
     return status;
 }
 
+/* get_uri - This function gets the uri from the client's request. It
+ * tokenizes the request line (using whitespace) to determine the 
+ * method, uri, and version */
 int get_uri(char *request_buff,char *method_buff, char *uri_buff, char *version_buff){
     /*request is null*/
     if(request_buff == NULL)
@@ -396,6 +439,9 @@ int get_uri(char *request_buff,char *method_buff, char *uri_buff, char *version_
     return 0;
 }
 
+/* create_error_response - This function creates error response body 
+ * and header for if there is an error (such as bad requests).
+ */
 void create_error_response(char* response_buff, int status, char* status_message){
     char response_body[MAXLINE];
     char response_header[MAXLINE];
@@ -415,6 +461,9 @@ void create_error_response(char* response_buff, int status, char* status_message
     return;
 }
 
+/* find_cache_in_list - This function looks for the DNS cache in the
+ * linked list of DNS caches.
+ */
 struct DNScache* find_cache_in_list(char* host_name){
     if(DNSListStart == NULL)
         return NULL;
@@ -430,6 +479,10 @@ struct DNScache* find_cache_in_list(char* host_name){
     return found_cache;
 }
 
+/* add_cache_to_list - This function adds the DNS cache to the linked
+ * list if it didn't already exist, putting it onto the back of the 
+ * list.
+ */
 struct DNScache* add_cache_to_list(char* host_name){
     struct DNScache *new_cache = (struct DNScache*)malloc(sizeof(struct DNScache));
     new_cache->hostname = strdup(host_name);
@@ -451,6 +504,10 @@ struct DNScache* add_cache_to_list(char* host_name){
     return new_cache;
 }
 
+/* my_open_clientfd - This function establishes a connection 
+ * with the server and returns the fd ready for reading and 
+ * writing.
+ */
 int my_open_clientfd(struct hostent *cached_host_entry, int port){
     /*this is copied from open_clientfd in csapp.c
     but replaced gethostbyname with the cached host entry*/
