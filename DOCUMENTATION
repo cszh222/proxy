@@ -56,3 +56,11 @@ Limitations:
 	  some initial sluggishnes when trying to load a page. Searching through the cache
 	  also takes more time as the list grows. A better approach would be to use a hash
 	  or a binary tree.
+	- Sites that contain large number of files, such as images may overwhelm the proxy.
+	  For these sites the browser will usually send a large number go GET requests to the 
+	  proxy at once which causes a large number of child processes to be created. All child
+	  processes will run concurrently which causes all processes to slow down. This also 
+	  cause large files to load slower.
+	  Testing on some sites with large number of links: 
+	  (It took around 500,000 ms to load the javascript files for www.reddit.com, some of the other files timed out)
+	  (It took 250,000 ms to load the html and css files for www.youtube.com, some other files timed out )
